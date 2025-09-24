@@ -18,19 +18,23 @@ const float conversion_factor = 3.3f / (1 << 12);
 
 const int SYSTEM_TICK_MS = 10;
 
-volatile int g_toggle_interval_ms = 0;
-volatile int g_tick_counter = 0;
+typedef struct {
+    volatile int toggle_interval_ms;
+    volatile int tick_counter;
+} TimerData;
 
 bool timer_callback(struct repeating_timer *t) {
-    if (g_toggle_interval_ms == 0) {
+    TimerData *data = (TimerData *)t->user_data;
+
+    if (data->toggle_interval_ms == 0) {
         return true;
     }
 
-    g_tick_counter += SYSTEM_TICK_MS;
+    data->tick_counter += SYSTEM_TICK_MS;
 
-    if (g_tick_counter >= g_toggle_interval_ms) {
+    if (data->tick_counter >= data->toggle_interval_ms) {
         gpio_put(PIN_LED_B, !gpio_get(PIN_LED_B));
-        g_tick_counter = 0;
+        data->tick_counter = 0;
     }
     
     return true;
@@ -52,8 +56,10 @@ int main() {
     adc_gpio_init(ADC_PIN);
     adc_select_input(ADC_INPUT);
 
+    TimerData timer_data = {0};
+
     struct repeating_timer timer;
-    add_repeating_timer_ms(SYSTEM_TICK_MS, timer_callback, NULL, &timer);
+    add_repeating_timer_ms(SYSTEM_TICK_MS, timer_callback, &timer_data, &timer);
 
     while (1) {
         uint16_t adc_raw = adc_read();
@@ -67,10 +73,11 @@ int main() {
             new_interval = 300 / 2;
         }
 
-        g_toggle_interval_ms = new_interval;
+        timer_data.toggle_interval_ms = new_interval;
 
-        if (g_toggle_interval_ms == 0) {
+        if (timer_data.toggle_interval_ms == 0) {
             gpio_put(PIN_LED_B, 0);
+            timer_data.tick_counter = 0;
         }
     }
 }
